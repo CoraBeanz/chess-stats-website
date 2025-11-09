@@ -1,11 +1,6 @@
 import matplotlib.pyplot as plt
 
 def extract_years_months(start, end):
-    """
-    Yield (year, month) pairs from start to end date inclusive.
-    Used to build URLs for monthly Chess.com archives.
-    """
-    
     year = start.year
     month = start.month
 
