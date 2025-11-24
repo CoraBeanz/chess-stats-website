@@ -1,12 +1,12 @@
-def insert_player_data(cur, player_id, username, display_name=None, current_rating=None):
+def insert_player_data(cur, player_id, username, display_name=None, current_rating=None, date_joined=None):
     cur.execute("""
-        INSERT INTO players (player_id, username, display_name, current_rating, last_updated)
-        VALUES (%s, %s, %s, %s, NOW())
+        INSERT INTO players (player_id, username, display_name, current_rating, date_joined, last_updated)
+        VALUES (%s, %s, %s, %s, %s, NOW())
         ON CONFLICT (player_id) DO UPDATE
         SET username = EXCLUDED.username,
             current_rating = EXCLUDED.current_rating,
             last_updated = NOW();
-    """, (player_id, username, display_name, current_rating))
+    """, (player_id, username, display_name, current_rating, date_joined))
 
 def insert_game_data(cur, game_id, player_username, opponent_username, opponent_rating, played_as_color, result, rating_after_game, time_class, start_time, end_time, duration_seconds, pgn):
     cur.execute("""

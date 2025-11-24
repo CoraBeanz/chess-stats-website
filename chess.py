@@ -27,7 +27,7 @@ conn = psycopg2.connect(
 
 cur = conn.cursor()
 
-count = 0
+games_count_total = 0
 
 duration_by_date = defaultdict(float)
 
@@ -44,6 +44,7 @@ if response.status_code == 200:
     player_data = response.json()
     player_id = player_data['player_id']
     display_name = player_data.get('name')
+    date_joined = datetime.fromtimestamp(player_data.get('joined'), tz=timezone.utc)
 
 else:
         print("Failed to fetch data:", response.status_code)
@@ -58,10 +59,10 @@ if response.status_code == 200:
 else:
         print("Failed to fetch data:", response.status_code)
 
-insert_player_data(cur, player_id, username, display_name, current_rating)
+insert_player_data(cur, player_id, username, display_name, current_rating, date_joined)
 
-start_input = "2025-01-01"
-end_input = "2025-11-10"
+start_input = "2018-05-01"
+end_input = "2025-11-23"
 
 start_date = datetime.strptime(start_input, "%Y-%m-%d").date()
 end_date =  datetime.strptime(end_input, "%Y-%m-%d").date()
@@ -70,6 +71,8 @@ urls = [f"https://api.chess.com/pub/player/{username}/games/{year}/{month:02d}"
         for year, month in extract_years_months(start_date, end_date)]
 
 for url in urls:
+
+    games_count_month = 0
     
     response = requests.get(url, headers=headers)
     time.sleep(.2)
@@ -78,10 +81,8 @@ for url in urls:
         data = response.json()
         for game in data['games']:
 
-            full_date = datetime.fromtimestamp(game['end_time'], tz=timezone.utc)
-
-            date_only = full_date.date()
-
+            end_time = datetime.fromtimestamp(game['end_time'], tz=timezone.utc)
+            date_only = end_time.date()
             pgn = game.get('pgn')
 
             if not pgn:
@@ -96,18 +97,16 @@ for url in urls:
                 start = start_time_match.group(1)
                 end = end_time_match.group(1)
 
-                format = "%H:%M:%S"
+                h1, m1, s1 = map(int, start.split(":"))
+                h2, m2, s2 = map(int, end.split(":"))
 
-                start_time_day = datetime.strptime(start, format).time()
-                end_time_day = datetime.strptime(end, format).time()
+                start_duration = timedelta(hours=h1, minutes=m1, seconds=s1)
+                end_duration = timedelta(hours=h2, minutes=m2, seconds=s2)
 
-                start_time = datetime.combine(date_only, start_time_day).replace(tzinfo=timezone.utc)
-                end_time = datetime.combine(date_only, end_time_day).replace(tzinfo=timezone.utc)
+                if end_duration < start_duration:
+                    end_duration += timedelta(days=1)
 
-                if end_time < start_time:
-                    end_time += timedelta(days=1)
-
-                duration = end_time - start_time
+                duration = end_duration - start_duration
                 duration_seconds = duration.total_seconds()
 
                 duration_by_date[date_only] += duration_seconds
@@ -134,14 +133,20 @@ for url in urls:
             result = game[played_as_color]['result']
             rating_after_game = game[played_as_color]['rating']
             time_class = game['time_class']
-            count += 1
 
-            insert_game_data(cur, game_id, player_username, opponent_username, opponent_rating, played_as_color, result, rating_after_game, time_class, start_time, end_time, duration_seconds, pgn)
-     
+            start_time = end_time - duration
+
+            games_count_month += 1
+            games_count_total += 1
+
+            insert_game_data(cur, game_id, player_username, opponent_username, opponent_rating, played_as_color, result, rating_after_game, time_class, start_time, end_time, duration_seconds, pgn)        
     else:
         print("Failed to fetch data:", response.status_code)
 
-print(f"Success! {count} games stored")
+    print(f"{games_count_month} Games fetched from {url}")
+
+print(f"Success! {games_count_total} games stored")
+
 conn.commit()
 cur.close()
 conn.close()
