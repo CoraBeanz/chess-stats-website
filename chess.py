@@ -26,16 +26,15 @@ conn = psycopg2.connect(
 )
 
 cur = conn.cursor()
-
 games_count_total = 0
-
 duration_by_date = defaultdict(float)
+correct_username = None
 
 headers = {
     "User-Agent": "ConnorChessTracker (Personal project; beginner dev; contact: ronnnoc715@yahoo.com)"
 }
 
-username = "neerajfrommacungie"
+username = "neerajfrommacungie".lower()
 
 response = requests.get(f"https://api.chess.com/pub/player/{username}", headers=headers)
 time.sleep(1)
@@ -45,6 +44,7 @@ if response.status_code == 200:
     player_id = player_data['player_id']
     display_name = player_data.get('name')
     date_joined = datetime.fromtimestamp(player_data.get('joined'), tz=timezone.utc)
+    profile_image = player_data['avatar']
 
 else:
         print("Failed to fetch data:", response.status_code)
@@ -59,16 +59,23 @@ if response.status_code == 200:
 else:
         print("Failed to fetch data:", response.status_code)
 
-insert_player_data(cur, player_id, username, display_name, current_rating, date_joined)
+insert_player_data(cur, player_id, username, display_name, current_rating, date_joined, profile_image)
 
-start_input = "2018-05-01"
-end_input = "2025-11-23"
+# start_input = "2025-11-01"
+# end_input = "2025-11-23"
 
-start_date = datetime.strptime(start_input, "%Y-%m-%d").date()
-end_date =  datetime.strptime(end_input, "%Y-%m-%d").date()
+# start_date = datetime.strptime(start_input, "%Y-%m-%d").date()
+# end_date =  datetime.strptime(end_input, "%Y-%m-%d").date()
+
+start_date = date_joined.date()
+end_date = datetime.now(timezone.utc).date()
 
 urls = [f"https://api.chess.com/pub/player/{username}/games/{year}/{month:02d}"
         for year, month in extract_years_months(start_date, end_date)]
+
+print("Starting game ingestion...")
+
+start_timer = datetime.now()
 
 for url in urls:
 
@@ -81,12 +88,17 @@ for url in urls:
         data = response.json()
         for game in data['games']:
 
+            if game['time_class'] not in ('rapid', 'bullet', 'blitz'):
+                 continue
+
             end_time = datetime.fromtimestamp(game['end_time'], tz=timezone.utc)
             date_only = end_time.date()
+
             pgn = game.get('pgn')
 
             if not pgn:
                  print(f"[SKIPPED] Game {game.get('url', '(no id)')} has no PGN. {url}")
+                 continue
 
             if pgn:     
                 start_time_match = re.search(r'\[StartTime "(\d{2}:\d{2}:\d{2})"\]', pgn)
@@ -111,23 +123,32 @@ for url in urls:
 
                 duration_by_date[date_only] += duration_seconds
 
-            if game['white']['username'] == username:
+            if correct_username == None:
+                white_username = game['white']['username']
+                black_username = game['black']['username']
+
+                if white_username.lower() == username:
+                     correct_username = white_username
+                elif black_username.lower() == username:
+                     correct_username = black_username
+
+            if game['white']['username'].lower() == username:
                 rating = game['white']['rating']
                 played_as_color = 'white'   
 
-            elif game['black']['username'] == username:
+            elif game['black']['username'].lower() == username:
                 rating = game['black']['rating']
                 played_as_color = 'black'  
 
             game_id = int(game['url'].rstrip("/").split("/")[-1])
             player_username = username
-            
+
             if played_as_color == 'white':
-                opponent_username = game['black']['username']
+                opponent_username = game['black']['username'].lower()
                 opponent_rating = game['black']['rating']
 
             elif played_as_color == 'black':
-                opponent_username = game['white']['username']
+                opponent_username = game['white']['username'].lower()
                 opponent_rating = game['white']['rating']
 
             result = game[played_as_color]['result']
@@ -145,7 +166,16 @@ for url in urls:
 
     print(f"{games_count_month} Games fetched from {url}")
 
-print(f"Success! {games_count_total} games stored")
+update_player_username(cur, correct_username, player_id)
+
+last_game_time = get_last_game_time(cur, correct_username)
+
+if last_game_time is not None:
+    update_last_game_time(cur, last_game_time, player_id)
+
+end_timer = datetime.now()
+
+print(f"Success! {games_count_total} games stored. Time elapsed: {end_timer - start_timer}")
 
 conn.commit()
 cur.close()
