@@ -1,21 +1,22 @@
-def insert_player_data(cur, player_id, username, display_name=None, current_rating=None, date_joined=None, profile_image=None):
+def insert_player_data(cur, player_id, username_normalized, username_display, display_name=None, current_rating=None, date_joined=None, profile_image=None):
     cur.execute("""
-        INSERT INTO players (player_id, username, display_name, current_rating, date_joined, profile_image, last_updated)
-        VALUES (%s, %s, %s, %s, %s, %s, NOW())
+        INSERT INTO players (player_id, username_normalized, username_display, display_name, current_rating, date_joined, profile_image, last_updated)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
         ON CONFLICT (player_id) DO UPDATE
-        SET username = EXCLUDED.username,
+        SET username_normalized = EXCLUDED.username_normalized,
             current_rating = EXCLUDED.current_rating,
             profile_image = EXCLUDED.profile_image,
+            username_display = EXCLUDED.username_display,
             last_updated = NOW();
-    """, (player_id, username, display_name, current_rating, date_joined, profile_image))
+    """, (player_id, username_normalized, username_display, display_name, current_rating, date_joined, profile_image))
 
-def update_player_username(cur, correct_username, player_id):
+def update_player_username(cur, username_display, player_id):
     cur.execute("""
         UPDATE players
-        SET username = %s
+        SET username_display = %s
         WHERE player_id = %s;
                 
-    """, (correct_username, player_id))
+    """, (username_display, player_id))
 
 def insert_game_data(cur, game_id, player_username, opponent_username, opponent_rating, played_as_color, result, rating_after_game, time_class, start_time, end_time, duration_seconds, pgn):
     cur.execute("""

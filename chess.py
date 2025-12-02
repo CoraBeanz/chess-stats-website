@@ -28,15 +28,15 @@ conn = psycopg2.connect(
 cur = conn.cursor()
 games_count_total = 0
 duration_by_date = defaultdict(float)
-correct_username = None
+username_display = None
 
 headers = {
     "User-Agent": "ConnorChessTracker (Personal project; beginner dev; contact: ronnnoc715@yahoo.com)"
 }
 
-username = "neerajfrommacungie".lower()
+username_normalized = "gothamchess".lower()
 
-response = requests.get(f"https://api.chess.com/pub/player/{username}", headers=headers)
+response = requests.get(f"https://api.chess.com/pub/player/{username_normalized}", headers=headers)
 time.sleep(1)
 
 if response.status_code == 200:
@@ -49,7 +49,7 @@ if response.status_code == 200:
 else:
         print("Failed to fetch data:", response.status_code)
 
-response = requests.get(f"https://api.chess.com/pub/player/{username}/stats", headers=headers)
+response = requests.get(f"https://api.chess.com/pub/player/{username_normalized}/stats", headers=headers)
 time.sleep(1)
 
 if response.status_code == 200:
@@ -59,18 +59,12 @@ if response.status_code == 200:
 else:
         print("Failed to fetch data:", response.status_code)
 
-insert_player_data(cur, player_id, username, display_name, current_rating, date_joined, profile_image)
-
-# start_input = "2025-11-01"
-# end_input = "2025-11-23"
-
-# start_date = datetime.strptime(start_input, "%Y-%m-%d").date()
-# end_date =  datetime.strptime(end_input, "%Y-%m-%d").date()
+insert_player_data(cur, player_id, username_normalized, username_display, display_name, current_rating, date_joined, profile_image)
 
 start_date = date_joined.date()
 end_date = datetime.now(timezone.utc).date()
 
-urls = [f"https://api.chess.com/pub/player/{username}/games/{year}/{month:02d}"
+urls = [f"https://api.chess.com/pub/player/{username_normalized}/games/{year}/{month:02d}"
         for year, month in extract_years_months(start_date, end_date)]
 
 print("Starting game ingestion...")
@@ -123,25 +117,25 @@ for url in urls:
 
                 duration_by_date[date_only] += duration_seconds
 
-            if correct_username == None:
+            if username_display == None:
                 white_username = game['white']['username']
                 black_username = game['black']['username']
 
-                if white_username.lower() == username:
-                     correct_username = white_username
-                elif black_username.lower() == username:
-                     correct_username = black_username
+                if white_username.lower() == username_normalized:
+                     username_display = white_username
+                elif black_username.lower() == username_normalized:
+                     username_display = black_username
 
-            if game['white']['username'].lower() == username:
+            if game['white']['username'].lower() == username_normalized:
                 rating = game['white']['rating']
                 played_as_color = 'white'   
 
-            elif game['black']['username'].lower() == username:
+            elif game['black']['username'].lower() == username_normalized:
                 rating = game['black']['rating']
                 played_as_color = 'black'  
 
             game_id = int(game['url'].rstrip("/").split("/")[-1])
-            player_username = username
+            player_username = username_normalized
 
             if played_as_color == 'white':
                 opponent_username = game['black']['username'].lower()
@@ -166,9 +160,9 @@ for url in urls:
 
     print(f"{games_count_month} Games fetched from {url}")
 
-update_player_username(cur, correct_username, player_id)
+update_player_username(cur, username_display, player_id)
 
-last_game_time = get_last_game_time(cur, correct_username)
+last_game_time = get_last_game_time(cur, username_normalized)
 
 if last_game_time is not None:
     update_last_game_time(cur, last_game_time, player_id)
