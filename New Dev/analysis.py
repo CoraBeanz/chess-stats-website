@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -125,3 +124,67 @@ def openings_performance(df):
     #performance[['win_rate', 'loss_rate', 'tie_rate', 'play_rate']].to_csv('performance.csv', index=True)
 
     return performance[['win_rate', 'loss_rate', 'tie_rate', 'play_rate']]
+
+
+
+def win_loss_draw_vs_other_features(df):
+    #Clean the dataframe of non-blitz games
+    unwanted = ['bughousepartnerlose']
+    df = df[~df['result'].isin(unwanted)]
+
+    #Replace all the results with -1 for loss, 0 for draw, 1 for win
+    df['result'] = df['result'].replace(['resigned', 'timeout', 'checkmated', 'abandoned'], -1)
+    df['result'] = df['result'].replace(['agreed', 'insufficient', 'repetition', 'timevsinsufficient', 'stalemate', '50move'], 0)
+    df['result'] = df['result'].replace('win', 1)
+
+    #replace 'played_as_color' with binary, white = 1 black = 0
+    df['played_as_color'] = df['played_as_color'].replace({'black': 0, 'white': 1})
+
+    #month
+    df['month'] = df['date'].dt.month
+    df['year'] = df['date'].dt.year
+
+    #calculations
+    df['rating_diff'] = df['opponent_rating'] - df['rating_after_game']
+    biggest_win = df['rating_diff'].max()
+    biggest_loss = df['rating_diff'].min()
+    print(f'Neerajs biggest win was against a player +{biggest_win} his elo.')
+    print(f'Neerajs biggest loss was against a player {biggest_loss} his elo')
+    print(df[df['rating_diff'] == biggest_loss])
+
+    # Features & target (KEEP DRAWS)
+    X = df[
+        [
+            'rating_diff',
+            'rating_after_game',
+            'opponent_rating',
+            'duration_seconds',
+            'played_as_color',
+            'month',
+            'year'
+        ]
+    ]
+    y = df['result']
+    # Scale
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # Multinomial logistic regression
+    model = LogisticRegression(
+        multi_class='multinomial',
+        solver='lbfgs',
+        max_iter=1000
+    )
+    model.fit(X_scaled, y)
+
+    class_names = {
+    -1: 'Loss',
+     0: 'Draw',
+     1: 'Win'
+    }
+
+    for class_idx, class_label in zip(model.classes_, model.classes_):
+        print(f"\n=== Coefficients for {class_names[class_label]} ===")
+        coef_row = model.coef_[list(model.classes_).index(class_label)]
+        for feature, weight in zip(X.columns, coef_row):
+            print(f"{feature}: {weight:.4f}")

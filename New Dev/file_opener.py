@@ -2,7 +2,8 @@ import pandas as pd
 
 def load_chess_data(filepath):
     df = pd.read_csv(filepath)
-    print(df.head()) 
+    print(df.head())
+    df = unpack_pgn(df)
     return df
 
 #Expands the df with several new series of pgn data it has extracted
